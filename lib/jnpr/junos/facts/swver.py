@@ -111,7 +111,13 @@ def facts_software_version(junos, facts):
         facts['2RE'] = True
         versions = []
 
-        xpath = './multi-routing-engine-item[re-name="{}"]/software-information/host-name'.format(
+        if isinstance(f_master, list):
+            xpath = './multi-routing-engine-item[re-name="{}"' \
+                    ']/software-information/host-name'.format(
+            f_master[0].lower())
+        else:
+            xpath = './multi-routing-engine-item[re-name="{}"' \
+                    ']/software-information/host-name'.format(
             f_master.lower())
         facts['hostname'] = x_swver.findtext(xpath)
         if facts['hostname'] is None:
