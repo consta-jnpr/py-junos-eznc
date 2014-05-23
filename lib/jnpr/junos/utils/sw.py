@@ -48,8 +48,9 @@ class SW(Util):
         self._RE_list = [
             x for x in dev.facts.keys() if x.startswith('version_RE')]
         self._multi_RE = bool(len(self._RE_list) > 1)
-        self._multi_MX = bool(
-            dev.facts['personality'] == "MX" and self._multi_RE is True)
+        persona = dev.facts['personality']
+        self._multi_MX = bool(self._multi_RE is True and (
+            (persona in "MX") or ("SRX" in persona) or (persona == 'SWITCH')))
         self._multi_VC = bool(
             self._multi_RE is True and dev.facts.get('vc_capable') is True)
 
@@ -110,6 +111,7 @@ class SW(Util):
           callback function to indicate progress.  You can use :SW.progress:
           for basic reporting.  See that class method for details.
         """
+
         def _progress(report):
         # report progress only if a progress callback was provided
             if progress is not None:
@@ -334,26 +336,30 @@ class SW(Util):
                 dev.timeout = restore_timeout
                 return v_ok  # will be the string of output
 
+        ret_value = True
         if self._multi_RE is False:
             # simple case of device with only one RE
             _progress("installing software ... please be patient ...")
-            add_ok = self.pkgadd(remote_package)
+            installed = self.pkgadd(remote_package)
             dev.timeout = restore_timeout
-            return add_ok
+            _progress("installing software returned: %s"%bool(installed))
+            ret_value = True if installed == True else False
         else:
             # we need to update multiple devices
             if self._multi_MX is True:
-                ok = True
                 _progress(
                     "installing software on RE0 ... please be patient ...")
-                ok &= self.pkgadd(remote_package, re0=True)
+                re0_installed = self.pkgadd(remote_package, re0=True)
+                _progress(
+                    "installing software on RE0 returned: %s"%bool(re0_installed))
                 _progress(
                     "installing software on RE1 ... please be patient ...")
-                ok &= self.pkgadd(remote_package, re1=True)
+                re1_installed = self.pkgadd(remote_package, re1=True)
+                _progress(
+                    "installing software on RE1 returned: %s"%bool(re1_installed))
                 dev.timeout = restore_timeout
-                return ok
+                ret_value = True if (re0_installed == re1_installed == True) else False
             elif self._multi_VC is True:
-                ok = True
                 # extract the VC number out of the 'version_RE<n>' string
                 vc_members = [
                     re.search(
@@ -363,9 +369,15 @@ class SW(Util):
                     _progress(
                         "installing software on VC member: {0} ... please be"
                         " patient ...".format(vc_id))
-                    ok &= self.pkgadd(remote_package, member=vc_id)
+                    installed = self.pkgadd(remote_package, member=vc_id)
+                    _progress(
+                    "installing software on VC member %s returned: %s"%(vc_id,
+                                                                          bool(installed)))
+                    ret_value = True if installed==ret_value else False
                 dev.timeout = restore_timeout
-                return ok
+            else:
+                raise ValueError('Given device is not supported right now')
+        return ret_value
 
     # -------------------------------------------------------------------------
     # rebbot - system reboot
